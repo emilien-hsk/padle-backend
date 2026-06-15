@@ -8,7 +8,7 @@ const router = Router();
 
 // GET /api/players — classement général
 router.get('/', async (_req, res: Response): Promise<void> => {
-  const players = await Player.find().sort({ elo: -1 }).select('-passwordHash');
+  const players = await Player.find({ isAdmin: { $ne: true } }).sort({ elo: -1 }).select('-passwordHash');
   res.json(players);
 });
 
