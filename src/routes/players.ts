@@ -80,11 +80,32 @@ router.get('/:id', async (req, res: Response): Promise<void> => {
   const matches = await Match.find({
     $or: [{ teamA: pid }, { teamB: pid }],
     validated: true,
-  }).populate('teamA teamB', 'username elo');
+  })
+    .populate('teamA teamB', 'username elo')
+    .sort({ date: -1 });
 
   const stats = computeStats(pid, matches);
 
-  res.json({ player, stats });
+  // Historique enrichi avec le résultat du point de vue du joueur
+  const history = matches.map((m: any) => {
+    const isTeamA = m.teamA.some((p: any) => p._id.toString() === pid.toString());
+    const result =
+      m.winner === 'draw' ? 'draw'
+      : (isTeamA && m.winner === 'teamA') || (!isTeamA && m.winner === 'teamB') ? 'win'
+      : 'loss';
+    return {
+      _id: m._id,
+      date: m.date,
+      teamA: m.teamA,
+      teamB: m.teamB,
+      scores: m.scores,
+      winner: m.winner,
+      coefficient: m.coefficient,
+      result,
+    };
+  });
+
+  res.json({ player, stats, history });
 });
 
 // POST /api/players/:id/claim — demande de ralliement d'un profil invité
