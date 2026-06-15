@@ -5,6 +5,7 @@ export interface IPlayer extends Document {
   email?: string;
   passwordHash?: string;
   isRegistered: boolean;
+  isAdmin: boolean;
   elo: number;
   badges: string[];
   currentStreak: number;
@@ -21,6 +22,7 @@ const PlayerSchema = new Schema<IPlayer>(
     email: { type: String, unique: true, sparse: true, lowercase: true },
     passwordHash: { type: String },
     isRegistered: { type: Boolean, default: false },
+    isAdmin: { type: Boolean, default: false },
     elo: { type: Number, default: 1200 },
     badges: [{ type: String }],
     currentStreak: { type: Number, default: 0 },

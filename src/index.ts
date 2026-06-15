@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import authRoutes from './routes/auth';
 import playerRoutes from './routes/players';
 import matchRoutes from './routes/matches';
+import adminRoutes from './routes/admin';
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/players', playerRoutes);
 app.use('/api/matches', matchRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
