@@ -12,6 +12,40 @@ router.get('/', async (_req, res: Response): Promise<void> => {
   res.json(players);
 });
 
+// GET /api/players/pending-claims — demandes de fusion que le joueur connecté peut valider
+router.get('/pending-claims', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  const approverId = new mongoose.Types.ObjectId(req.playerId);
+
+  // Trouver tous les profils invités avec une demande en attente
+  const pendingGuests = await Player.find({ claimStatus: 'pending' }).select('-passwordHash');
+
+  // Garder seulement ceux avec qui le joueur a partagé un match
+  const eligible: typeof pendingGuests = [];
+  for (const guest of pendingGuests) {
+    const shared = await Match.findOne({
+      $or: [
+        { teamA: { $all: [guest._id, approverId] } },
+        { teamB: { $all: [guest._id, approverId] } },
+        { teamA: guest._id, teamB: approverId },
+        { teamA: approverId, teamB: guest._id },
+      ],
+    });
+    if (shared) eligible.push(guest);
+  }
+
+  // Enrichir avec le nom du réclamant
+  const result = await Promise.all(
+    eligible.map(async (g) => {
+      const claimant = g.claimRequestedBy
+        ? await Player.findById(g.claimRequestedBy).select('username')
+        : null;
+      return { guest: g, claimant };
+    })
+  );
+
+  res.json(result);
+});
+
 // POST /api/players/guest — créer un profil invité
 router.post('/guest', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const { username } = req.body;
