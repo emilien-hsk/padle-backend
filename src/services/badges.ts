@@ -37,7 +37,7 @@ async function checkMercenaire(playerId: mongoose.Types.ObjectId): Promise<boole
 
 async function checkFidele(playerId: mongoose.Types.ObjectId): Promise<boolean> {
   const matches = await getPlayerMatches(playerId);
-  if (matches.length < 10) return false;
+  if (matches.length < 5) return false;
 
   let streak = 1;
   let lastPartner: string | null = null;
@@ -50,7 +50,7 @@ async function checkFidele(playerId: mongoose.Types.ObjectId): Promise<boolean> 
 
     if (partner === lastPartner) {
       streak++;
-      if (streak >= 10) return true;
+      if (streak >= 5) return true;
     } else {
       streak = 1;
       lastPartner = partner;
@@ -60,12 +60,13 @@ async function checkFidele(playerId: mongoose.Types.ObjectId): Promise<boolean> 
 }
 
 async function checkRemontada(playerId: mongoose.Types.ObjectId): Promise<boolean> {
+  // Gagner un match après avoir subi un 6-0 au premier set (min 2 sets)
   const wins = await Match.find({
     $or: [
       { teamA: playerId, winner: 'teamA' },
       { teamB: playerId, winner: 'teamB' },
     ],
-    'scores.2': { $exists: true }, // au moins 3 sets
+    'scores.1': { $exists: true }, // au moins 2 sets
   });
 
   for (const match of wins) {

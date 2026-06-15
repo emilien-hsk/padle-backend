@@ -62,6 +62,18 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promis
     pB1.elo += deltaB;
     pB2.elo += deltaB;
 
+    // Mise à jour des séries de victoires
+    const winnersTeam = winner === 'teamA' ? [pA1, pA2] : winner === 'teamB' ? [pB1, pB2] : [];
+    const losersTeam = winner === 'teamA' ? [pB1, pB2] : winner === 'teamB' ? [pA1, pA2] : [pA1, pA2, pB1, pB2];
+
+    for (const p of winnersTeam) {
+      p.currentStreak = (p.currentStreak || 0) + 1;
+      if (p.currentStreak > (p.bestStreak || 0)) p.bestStreak = p.currentStreak;
+    }
+    for (const p of losersTeam) {
+      if (!winnersTeam.includes(p)) p.currentStreak = 0;
+    }
+
     match.eloChanges = [
       { playerId: pA1._id as mongoose.Types.ObjectId, delta: deltaA },
       { playerId: pA2._id as mongoose.Types.ObjectId, delta: deltaA },
