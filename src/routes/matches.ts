@@ -30,9 +30,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promis
     return;
   }
 
-  // Coefficient : 1 set ou set inachevé = 0.5, sinon 1.0
-  const hasIncomplete = scores.some((s: any) => s.isComplete === false);
-  const coefficient = scores.length === 1 || hasIncomplete ? 0.5 : 1.0;
+  const coefficient = 1.0;
 
   const match = await Match.create({
     teamA,
