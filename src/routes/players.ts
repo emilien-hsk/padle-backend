@@ -146,9 +146,8 @@ router.post('/:id/claim/approve', authMiddleware, async (req: AuthRequest, res: 
     await claimant.save();
   }
 
-  guest.claimStatus = 'approved';
-  guest.claimedBy = claimantId;
-  await guest.save();
+  // Supprimer le profil invité maintenant que tout est transféré
+  await Player.findByIdAndDelete(pid);
 
   res.json({ message: 'Profil fusionné avec succès' });
 });
