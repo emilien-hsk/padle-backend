@@ -24,7 +24,7 @@ const PlayerSchema = new Schema<IPlayer>(
     isRegistered: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
     elo: { type: Number, default: 1200 },
-    badges: [{ type: String }],
+    badges: { type: [String], default: [] },
     currentStreak: { type: Number, default: 0 },
     bestStreak: { type: Number, default: 0 },
     claimedBy: { type: Schema.Types.ObjectId, ref: 'Player' },
