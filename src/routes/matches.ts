@@ -30,7 +30,9 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promis
     return;
   }
 
-  const coefficient = 1.0;
+  // Coefficient automatique : match incomplet ou 1 seul set = 0.5, sinon 1.0
+  const hasIncomplete = scores.some((s: any) => s.isComplete === false);
+  const coefficient = hasIncomplete || scores.length === 1 ? 0.5 : 1.0;
 
   const match = await Match.create({
     teamA,

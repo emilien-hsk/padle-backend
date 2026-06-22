@@ -5,6 +5,7 @@ import Match from '../models/Match';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { adminMiddleware } from '../middleware/admin';
 import { calculateElo } from '../services/elo';
+import { recomputePlayer } from '../services/recompute';
 
 const router = Router();
 router.use(authMiddleware, adminMiddleware);
@@ -55,13 +56,19 @@ router.delete('/matches/:id', async (_req, res: Response): Promise<void> => {
   const match = await Match.findById(_req.params.id);
   if (!match) { res.status(404).json({ message: 'Match introuvable' }); return; }
 
+  const playerIds = [...match.teamA, ...match.teamB] as mongoose.Types.ObjectId[];
+
   // Annuler les changements ELO
   for (const change of match.eloChanges) {
     await Player.findByIdAndUpdate(change.playerId, { $inc: { elo: -change.delta } });
   }
 
   await match.deleteOne();
-  res.json({ message: 'Match supprimé et ELO annulé' });
+
+  // Recalculer streaks et badges pour les joueurs concernés
+  await Promise.all(playerIds.map((id) => recomputePlayer(id)));
+
+  res.json({ message: 'Match supprimé et stats recalculées' });
 });
 
 // PUT /api/admin/matches/:id — modifier les scores d'un match et recalculer l'ELO
@@ -106,6 +113,11 @@ router.put('/matches/:id', async (req: AuthRequest, res: Response): Promise<void
   }
 
   await match.save();
+
+  // Recalculer streaks et badges pour les joueurs concernés
+  const playerIds = [...match.teamA, ...match.teamB] as mongoose.Types.ObjectId[];
+  await Promise.all(playerIds.map((id) => recomputePlayer(id)));
+
   const populated = await match.populate('teamA teamB', 'username elo');
   res.json(populated);
 });
