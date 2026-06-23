@@ -3,7 +3,9 @@ import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import Player from '../models/Player';
 
-dotenv.config();
+dotenv.config({ path: require('path').resolve(__dirname, '../../../.env') });
+// fallback si path résolu échoue
+if (!process.env.MONGODB_URI) dotenv.config();
 
 async function createAdmin() {
   await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/padle');
