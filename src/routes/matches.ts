@@ -5,6 +5,7 @@ import Player from '../models/Player';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { calculateElo } from '../services/elo';
 import { evaluateBadges } from '../services/badges';
+import { parseYouTubeId } from '../utils/youtube';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.get('/', async (_req, res: Response): Promise<void> => {
 
 // POST /api/matches — soumettre un match
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
-  const { teamA, teamB, scores, winner } = req.body;
+  const { teamA, teamB, scores, winner, videoUrl } = req.body;
 
   if (!teamA || !teamB || !scores || !winner) {
     res.status(400).json({ message: 'Données manquantes' });
@@ -28,6 +29,18 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promis
   if (teamA.length !== 2 || teamB.length !== 2) {
     res.status(400).json({ message: 'Chaque équipe doit avoir exactement 2 joueurs' });
     return;
+  }
+
+  // La vidéo est facultative, mais un lien fourni et invalide est une erreur :
+  // l'enregistrer silencieusement sans vidéo perdrait la saisie de l'utilisateur.
+  let video = null;
+  if (videoUrl?.trim()) {
+    const videoId = parseYouTubeId(videoUrl);
+    if (!videoId) {
+      res.status(400).json({ message: 'Lien YouTube invalide' });
+      return;
+    }
+    video = { videoId, addedBy: req.playerId, addedAt: new Date() };
   }
 
   // Coefficient automatique : match incomplet ou 1 seul set = 0.5, sinon 1.0
@@ -42,6 +55,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promis
     coefficient,
     submittedBy: req.playerId,
     validated: true, // auto-validé pour l'instant (simplification)
+    video,
   });
 
   // Calcul ELO
@@ -104,6 +118,64 @@ router.get('/:id', async (req, res: Response): Promise<void> => {
     return;
   }
   res.json(match);
+});
+
+// PUT /api/matches/:id/video — attacher ou remplacer la vidéo d'un match existant
+router.put('/:id/video', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  const videoId = parseYouTubeId(req.body?.videoUrl ?? '');
+  if (!videoId) {
+    res.status(400).json({ message: 'Lien YouTube invalide' });
+    return;
+  }
+
+  const match = await Match.findById(req.params.id);
+  if (!match) {
+    res.status(404).json({ message: 'Match introuvable' });
+    return;
+  }
+
+  match.video = {
+    videoId,
+    addedBy: req.playerId as unknown as mongoose.Types.ObjectId,
+    addedAt: new Date(),
+  };
+  await match.save();
+
+  const populated = await match.populate('teamA teamB', 'username elo');
+  res.json(populated);
+});
+
+// DELETE /api/matches/:id/video
+// Asymétrie volontaire : n'importe quel membre connecté peut attacher une
+// vidéo, mais seuls les joueurs qui ont disputé le match peuvent la retirer.
+// Ce sont eux qui apparaissent à l'image — la décision leur revient.
+router.delete('/:id/video', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  const match = await Match.findById(req.params.id);
+  if (!match) {
+    res.status(404).json({ message: 'Match introuvable' });
+    return;
+  }
+  if (!match.video) {
+    res.status(404).json({ message: 'Ce match n\'a pas de vidéo' });
+    return;
+  }
+
+  const participants = [...match.teamA, ...match.teamB].map((p) => p.toString());
+  const requester = await Player.findById(req.playerId);
+  const allowed =
+    requester?.isAdmin === true ||
+    participants.includes(req.playerId as string);
+
+  if (!allowed) {
+    res.status(403).json({ message: 'Seuls les joueurs de ce match peuvent retirer la vidéo' });
+    return;
+  }
+
+  match.video = null;
+  await match.save();
+
+  const populated = await match.populate('teamA teamB', 'username elo');
+  res.json(populated);
 });
 
 export default router;

@@ -19,6 +19,11 @@ export interface IMatch extends Document {
     playerId: mongoose.Types.ObjectId;
     delta: number;
   }[];
+  video?: {
+    videoId: string;
+    addedBy: mongoose.Types.ObjectId;
+    addedAt: Date;
+  } | null;
 }
 
 const SetScoreSchema = new Schema<ISetScore>(
@@ -47,6 +52,16 @@ const MatchSchema = new Schema<IMatch>(
         _id: false,
       },
     ],
+    // Seul l'identifiant YouTube est conservé — voir utils/youtube.ts.
+    video: {
+      type: {
+        videoId: { type: String, required: true },
+        addedBy: { type: Schema.Types.ObjectId, ref: 'Player', required: true },
+        addedAt: { type: Date, default: Date.now },
+      },
+      default: null,
+      _id: false,
+    },
   },
   { timestamps: true }
 );
