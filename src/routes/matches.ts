@@ -7,6 +7,10 @@ import { calculateElo } from '../services/elo';
 import { evaluateBadges } from '../services/badges';
 import { parseYouTubeId } from '../utils/youtube';
 
+import Channel from '../models/Channel';
+import Message from '../models/Message';
+import { postSystemMessage, pushToChannel } from '../services/channels';
+
 const router = Router();
 
 // GET /api/matches — historique
@@ -20,7 +24,7 @@ router.get('/', async (_req, res: Response): Promise<void> => {
 
 // POST /api/matches — soumettre un match
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
-  const { teamA, teamB, scores, winner, videoUrl } = req.body;
+  const { teamA, teamB, scores, winner, videoUrl, scorePrompt } = req.body;
 
   if (!teamA || !teamB || !scores || !winner) {
     res.status(400).json({ message: 'Données manquantes' });
@@ -43,11 +47,39 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promis
     video = { videoId, addedBy: req.playerId, addedAt: new Date() };
   }
 
+  // Score saisi depuis une discussion : on réserve le message pour éviter un doublon
+  const matchId = new mongoose.Types.ObjectId();
+  let promptMsg: InstanceType<typeof Message> | null = null;
+  let promptChannel: InstanceType<typeof Channel> | null = null;
+  if (scorePrompt?.channelId && scorePrompt?.messageId) {
+    if (!mongoose.isValidObjectId(scorePrompt.channelId) || !mongoose.isValidObjectId(scorePrompt.messageId)) {
+      res.status(400).json({ message: 'Discussion invalide' });
+      return;
+    }
+    promptChannel = await Channel.findOne({ _id: scorePrompt.channelId, members: req.playerId });
+    if (!promptChannel) {
+      res.status(403).json({ message: 'Tu ne fais pas partie de cette discussion' });
+      return;
+    }
+    promptMsg = await Message.findOneAndUpdate(
+      { _id: scorePrompt.messageId, channel: promptChannel._id, kind: 'score_prompt', 'scorePrompt.status': 'pending' },
+      { $set: { 'scorePrompt.status': 'recorded', 'scorePrompt.matchId': matchId, 'scorePrompt.doneBy': req.playerId } },
+      { new: true }
+    );
+    if (!promptMsg) {
+      res.status(409).json({ message: 'Le score de cette partie a déjà été enregistré' });
+      return;
+    }
+  }
+
   // Coefficient automatique : match incomplet ou 1 seul set = 0.5, sinon 1.0
   const hasIncomplete = scores.some((s: any) => s.isComplete === false);
   const coefficient = hasIncomplete || scores.length === 1 ? 0.5 : 1.0;
 
-  const match = await Match.create({
+  let match;
+  try {
+    match = await Match.create({
+    _id: matchId,
     teamA,
     teamB,
     scores,
@@ -57,6 +89,16 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promis
     validated: true, // auto-validé pour l'instant (simplification)
     video,
   });
+  } catch (err) {
+    // Libère le message de score si l'enregistrement échoue
+    if (promptMsg) {
+      await Message.updateOne(
+        { _id: promptMsg._id },
+        { $set: { 'scorePrompt.status': 'pending' }, $unset: { 'scorePrompt.matchId': 1, 'scorePrompt.doneBy': 1 } }
+      );
+    }
+    throw err;
+  }
 
   // Calcul ELO
   const [pA1, pA2, pB1, pB2] = await Promise.all([
@@ -107,6 +149,21 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promis
   }
 
   const populated = await match.populate('teamA teamB', 'username elo');
+
+  if (promptMsg && promptChannel) {
+    const names = (team: unknown) =>
+      (team as { username: string }[]).map((p) => p.username).join(' & ');
+    const sets = scores.map((sc: { teamA_Score: number; teamB_Score: number }) => `${sc.teamA_Score}-${sc.teamB_Score}`).join(' ');
+    const result = winner === 'draw' ? 'Match nul' : `Victoire ${names(winner === 'teamA' ? populated.teamA : populated.teamB)}`;
+    const author = (await Player.findById(req.playerId).select('username'))?.username ?? 'Un joueur';
+    await postSystemMessage(
+      promptChannel,
+      `🎾 Score enregistré par ${author} : ${names(populated.teamA)} ${sets} ${names(populated.teamB)} — ${result}.`
+    );
+    await promptChannel.save();
+    pushToChannel(promptChannel, req.playerId!, { title: '🎾 Score enregistré', body: `${result} (${sets})` }, true).catch(() => {});
+  }
+
   res.status(201).json(populated);
 });
 

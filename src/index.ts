@@ -8,6 +8,11 @@ import playerRoutes from './routes/players';
 import matchRoutes from './routes/matches';
 import adminRoutes from './routes/admin';
 import tournamentRoutes from './routes/tournaments';
+import bookingRoutes from './routes/booking';
+import availabilityRoutes from './routes/availability';
+import notificationRoutes from './routes/notifications';
+import channelRoutes from './routes/channels';
+import { startScorePromptScheduler } from './services/scorePrompts';
 
 dotenv.config();
 
@@ -33,6 +38,10 @@ app.use('/api/players', playerRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/tournaments', tournamentRoutes);
+app.use('/api/booking', bookingRoutes);
+app.use('/api/availability', availabilityRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/channels', channelRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
@@ -43,6 +52,7 @@ mongoose
   .then(() => {
     console.log('MongoDB connected');
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    startScorePromptScheduler();
   })
   .catch((err) => {
     console.error('MongoDB connection error:', err);

@@ -4,6 +4,7 @@ import Tournament, { ITournamentMatch } from '../models/Tournament';
 import Match from '../models/Match';
 import Player from '../models/Player';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { adminMiddleware } from '../middleware/admin';
 import { calculateElo } from '../services/elo';
 import { recomputePlayer } from '../services/recompute';
 
@@ -79,8 +80,8 @@ router.get('/', async (_req, res: Response): Promise<void> => {
   res.json(tournaments);
 });
 
-// POST /api/tournaments — créer
-router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+// POST /api/tournaments — créer (réservé aux admins pour l'instant)
+router.post('/', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const { name, teams, countForRanking } = req.body;
 
   if (!name || !teams || teams.length < 2) {
